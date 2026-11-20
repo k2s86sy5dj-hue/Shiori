@@ -629,8 +629,16 @@ class="flex-1 bg-cream border border-stone-200 rounded-xl px-3.5 py-2.5 text-sm 
 </div>
 <div id="share-panel-guide" class="hidden space-y-4">
 <div class="bg-emerald-50/80 border border-emerald-200 rounded-2xl p-3.5 text-xs text-stone-700 space-y-1.5 leading-relaxed">
-<p class="font-bold text-emerald-900">🟢 Firebaseプロジェクト（siori-eccf8）と接続済みです！</p>
-<p>このアプリにはすでにあなたのFirebase設定が組み込まれているため、そのまま友達とリアルタイム双方向同期（<code class="bg-white px-1 py-0.5 rounded border">trips/{roomId}</code>）が使えます。</p>
+<p class="font-bold text-emerald-900">🟢 Firebaseプロジェクト（siori-eccf8）と接続設定済み</p>
+<p>もし別端末（iPadとスマホなど）で同期されない場合は、Firebaseコンソールの <strong>Firestore Database ＞ ルール</strong> が読み書き許可になっているか確認してください。</p>
+<pre class="bg-stone-800 text-emerald-300 p-2.5 rounded-xl text-[11px] font-num overflow-x-auto mt-1">rules_version = '2';
+service cloud.firestore {
+match /databases/{database}/documents {
+match /trips/{roomId} {
+allow read, write: if true;
+}
+}
+}</pre>
 </div>
 <form onsubmit="saveFirebaseConfigFromUI(event)" class="space-y-2.5">
 <label class="block text-xs font-bold text-stone-700">
@@ -685,7 +693,7 @@ class="flex-1 bg-cream border border-stone-200 rounded-xl px-3.5 py-2.5 text-sm 
 <span id="toast-message">保存しました</span>
 </div>
 </div>
-<!-- ==================== JavaScript ロジック（即時切り替え＆非同期バックグラウンド同期） ==================== -->
+<!-- ==================== JavaScript ロジック（同期競合防止＆即時切り替え） ==================== -->
 <script>
 var DEFAULT_FIREBASE_CONFIG = {
 apiKey: "AIzaSyACB4hw0Igthc8oTnM7mxEbwfoZbZxruU8",
@@ -712,6 +720,8 @@ var db = null;
 var unsubscribeSnapshot = null;
 var isFirebaseConnected = false;
 var isApplyingRemoteUpdate = false;
+var isInitialRemoteFetchDone = false;
+var pendingLocalSaveBeforeSync = false;
 var fbModules = null;
 var defaultTripData = {
 title: '新しいグループ旅行 ✈️',
@@ -1025,14 +1035,7 @@ switchToRoom(list[0].roomId, false);
 renderMyTripsList();
 showToast('マイしおり一覧から削除しました');
 }
-function saveData(skipRemote) {
-registerCurrentTripToMyList();
-try {
-localStorage.setItem(LOCAL_DATA_PREFIX + currentRoomId, JSON.stringify(tripData));
-} catch (e) {}
-if (!skipRemote && !isApplyingRemoteUpdate && isFirebaseConnected && db && fbModules) {
-try {
-var tripRef = fbModules.doc(db, 'trips', currentRoomId);
+function buildSanitizedPayload() {
 var sanitizedPacking = tripData.packing.map(function(item) {
 return {
 id: item.id,
@@ -1040,17 +1043,32 @@ name: item.name,
 assigneeIds: getItemAssigneeIds(item)
 };
 });
-var payload = Object.assign({}, tripData, {
+return Object.assign({}, tripData, {
 packing: sanitizedPacking,
 updatedAt: Date.now()
 });
-fbModules.setDoc(tripRef, payload).catch(function(err) {
+}
+function saveData(skipRemote) {
+registerCurrentTripToMyList();
+try {
+localStorage.setItem(LOCAL_DATA_PREFIX + currentRoomId, JSON.stringify(tripData));
+} catch (e) {}
+if (!skipRemote && !isApplyingRemoteUpdate) {
+if (isFirebaseConnected && db && fbModules && isInitialRemoteFetchDone) {
+try {
+var tripRef = fbModules.doc(db, 'trips', currentRoomId);
+fbModules.setDoc(tripRef, buildSanitizedPayload()).catch(function(err) {
 console.error('Firestore sync error:', err);
+updateSyncStatusUI(false, '保存失敗(ルール確認)');
+showToast('クラウド保存エラー：Firebaseのルール設定を確認してください');
 });
 } catch (err) {}
+} else {
+pendingLocalSaveBeforeSync = true;
 }
 }
-// ==================== Firebase リアルタイム同期（バックグラウンド非同期） ====================
+}
+// ==================== Firebase リアルタイム同期（初回読み込み保護付き） ====================
 function getActiveFirebaseConfig() {
 try {
 var saved = localStorage.getItem(CONFIG_STORAGE_KEY);
@@ -1077,7 +1095,7 @@ if (modalPill) {
 modalPill.className = connected
 ? 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800'
 : 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800';
-modalPill.textContent = connected ? '🟢 リアルタイム同期中' : '🟡 ローカル保存中';
+modalPill.textContent = connected ? '🟢 リアルタイム同期中' : '🟡 ' + (statusText || 'ローカル保存中');
 }
 }
 function disconnectFirebase() {
@@ -1087,6 +1105,7 @@ unsubscribeSnapshot = null;
 }
 db = null;
 isFirebaseConnected = false;
+isInitialRemoteFetchDone = false;
 if (fbModules) {
 if (firebaseAppInstance) {
 try { fbModules.deleteApp(firebaseAppInstance); } catch (e) {}
@@ -1099,6 +1118,31 @@ fbModules.deleteApp(apps[i]);
 }
 } catch (e) {}
 }
+}
+function applyRemoteDataToLocal(remoteData) {
+isApplyingRemoteUpdate = true;
+tripData = {
+title: remoteData.title || defaultTripData.title,
+startDate: remoteData.startDate || '',
+dates: remoteData.dates || defaultTripData.dates,
+categories: (Array.isArray(remoteData.categories) && remoteData.categories.length > 0)
+? remoteData.categories
+: JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)),
+members: (Array.isArray(remoteData.members) && remoteData.members.length > 0) ? remoteData.members : defaultTripData.members,
+days: (Array.isArray(remoteData.days) && remoteData.days.length > 0) ? remoteData.days : defaultTripData.days,
+packing: Array.isArray(remoteData.packing) ? remoteData.packing : [],
+wishlist: Array.isArray(remoteData.wishlist) ? remoteData.wishlist : [],
+notes: Array.isArray(remoteData.notes) ? remoteData.notes : []
+};
+if (!tripData.days.some(function(d) { return d.id === selectedDayId; })) {
+selectedDayId = tripData.days[0].id;
+}
+saveData(true);
+renderAll();
+if (!document.getElementById('member-modal').classList.contains('hidden')) {
+renderModalMemberList();
+}
+isApplyingRemoteUpdate = false;
 }
 function initFirebaseSync() {
 disconnectFirebase();
@@ -1121,6 +1165,7 @@ getAuth: mods[1].getAuth,
 signInAnonymously: mods[1].signInAnonymously,
 getFirestore: mods[2].getFirestore,
 doc: mods[2].doc,
+getDoc: mods[2].getDoc,
 onSnapshot: mods[2].onSnapshot,
 setDoc: mods[2].setDoc
 };
@@ -1133,7 +1178,7 @@ db = fbModules.getFirestore(firebaseAppInstance);
 subscribeToTripRoom(currentRoomId);
 }).catch(function(error) {
 console.error('Firebase initialization failed:', error);
-updateSyncStatusUI(false, 'ローカル保存中');
+updateSyncStatusUI(false, '接続エラー');
 });
 }
 function subscribeToTripRoom(roomId) {
@@ -1143,42 +1188,39 @@ try { unsubscribeSnapshot(); } catch (e) {}
 unsubscribeSnapshot = null;
 }
 var tripRef = fbModules.doc(db, 'trips', roomId);
+// まずサーバー上の既存データを確実に1回取得して、初期データでの誤上書きを防ぐ
+fbModules.getDoc(tripRef).then(function(initialSnap) {
+isInitialRemoteFetchDone = true;
+updateSyncStatusUI(true, 'リアルタイム同期中');
+if (initialSnap.exists()) {
+applyRemoteDataToLocal(initialSnap.data());
+} else if (pendingLocalSaveBeforeSync || tripData.members.length > 1 || tripData.days[0].items.length > 0 || tripData.title !== defaultTripData.title) {
+fbModules.setDoc(tripRef, buildSanitizedPayload()).catch(function(err) {
+console.error('Initial setDoc error:', err);
+updateSyncStatusUI(false, '書き込み拒否(ルール確認)');
+});
+}
+pendingLocalSaveBeforeSync = false;
+// その後リアルタイム監視を開始
 unsubscribeSnapshot = fbModules.onSnapshot(
 tripRef,
 function(docSnap) {
 updateSyncStatusUI(true, 'リアルタイム同期中');
-if (docSnap.exists()) {
-var remoteData = docSnap.data();
-isApplyingRemoteUpdate = true;
-tripData = {
-title: remoteData.title || defaultTripData.title,
-startDate: remoteData.startDate || '',
-dates: remoteData.dates || defaultTripData.dates,
-categories: (Array.isArray(remoteData.categories) && remoteData.categories.length > 0)
-? remoteData.categories
-: JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)),
-members: (Array.isArray(remoteData.members) && remoteData.members.length > 0) ? remoteData.members : defaultTripData.members,
-days: (Array.isArray(remoteData.days) && remoteData.days.length > 0) ? remoteData.days : defaultTripData.days,
-packing: Array.isArray(remoteData.packing) ? remoteData.packing : [],
-wishlist: Array.isArray(remoteData.wishlist) ? remoteData.wishlist : [],
-notes: Array.isArray(remoteData.notes) ? remoteData.notes : []
-};
-if (!tripData.days.some(function(d) { return d.id === selectedDayId; })) {
-selectedDayId = tripData.days[0].id;
-}
-saveData(true);
-renderAll();
-isApplyingRemoteUpdate = false;
-} else {
-var initPayload = Object.assign({}, tripData, { updatedAt: Date.now() });
-fbModules.setDoc(tripRef, initPayload).catch(function() {});
+if (docSnap.exists() && !docSnap.metadata.hasPendingWrites) {
+applyRemoteDataToLocal(docSnap.data());
 }
 },
 function(error) {
 console.error('Firestore onSnapshot error:', error);
-updateSyncStatusUI(false, 'ローカル保存中');
+updateSyncStatusUI(false, '同期エラー(タップで確認)');
 }
 );
+}).catch(function(err) {
+console.error('Firestore getDoc error:', err);
+isInitialRemoteFetchDone = true;
+updateSyncStatusUI(false, '接続拒否(ルール確認)');
+showToast('クラウド接続エラー：Firebaseのルール設定を確認してください');
+});
 }
 // ==================== 日付計算＆URLサニタイズヘルパー ====================
 var WEEKDAYS_JP = ['日', '月', '火', '水', '木', '金', '土'];
@@ -1300,7 +1342,7 @@ clearTimeout(window._toastTimer);
 window._toastTimer = setTimeout(function() {
 toast.classList.add('opacity-0', 'translate-y-2');
 toast.classList.remove('opacity-100', 'translate-y-0');
-}, 2800);
+}, 3000);
 }
 // ==================== タブ切り替え ====================
 function switchTab(tabName) {
@@ -1411,7 +1453,8 @@ var name = input.value.trim();
 if (!name) return;
 var colors = ['bg-sage-600', 'bg-terracotta-500', 'bg-amber-600', 'bg-sky-600', 'bg-purple-600', 'bg-rose-500'];
 var color = colors[tripData.members.length % colors.length];
-tripData.members.push({ id: 'm' + Date.now(), name: name, color: color });
+var uniqueId = 'm_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+tripData.members.push({ id: uniqueId, name: name, color: color });
 input.value = '';
 saveData();
 renderHeader();
@@ -1728,7 +1771,7 @@ var idx = currentDay.items.findIndex(function(i) { return i.id === id; });
 if (idx !== -1) currentDay.items[idx] = { id: id, time: time, category: category, title: title, mapQuery: mapQuery, refUrl: refUrl, memo: memo };
 showToast('予定を更新しました');
 } else {
-currentDay.items.push({ id: 's' + Date.now(), time: time, category: category, title: title, mapQuery: mapQuery, refUrl: refUrl, memo: memo });
+currentDay.items.push({ id: 's_' + Date.now() + '_' + Math.floor(Math.random() * 1000), time: time, category: category, title: title, mapQuery: mapQuery, refUrl: refUrl, memo: memo });
 showToast('新しい予定を追加しました');
 }
 saveData();
@@ -1883,7 +1926,7 @@ var assignees = selectedNewPackingAssignees.length > 0
 ? selectedNewPackingAssignees.slice()
 : [(tripData.members[0] && tripData.members[0].id) || 'all'];
 tripData.packing.unshift({
-id: 'p' + Date.now(),
+id: 'p_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
 name: name,
 assigneeIds: assignees
 });
@@ -2047,7 +2090,7 @@ var mapQuery = document.getElementById('wish-map-query').value.trim();
 var refUrl = document.getElementById('wish-ref-url').value.trim();
 var memo = document.getElementById('wish-memo').value.trim();
 tripData.wishlist.unshift({
-id: 'w' + Date.now(),
+id: 'w_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
 name: name,
 category: category,
 area: area,
@@ -2105,7 +2148,7 @@ var preferredCatId = item.category === 'food'
 ? (foodCat ? foodCat.id : cats[0].id)
 : (spotCat ? spotCat.id : cats[0].id);
 targetDay.items.push({
-id: 's' + Date.now(),
+id: 's_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
 time: time,
 category: preferredCatId,
 title: item.name,
@@ -2194,7 +2237,7 @@ var idx = tripData.notes.findIndex(function(n) { return n.id === id; });
 if (idx !== -1) tripData.notes[idx] = { id: id, title: title, content: content, pinned: pinned, updatedAt: timeStr };
 showToast('メモを更新しました');
 } else {
-tripData.notes.unshift({ id: 'n' + Date.now(), title: title, content: content, pinned: pinned, updatedAt: timeStr });
+tripData.notes.unshift({ id: 'n_' + Date.now() + '_' + Math.floor(Math.random() * 1000), title: title, content: content, pinned: pinned, updatedAt: timeStr });
 showToast('メモを追加しました');
 }
 saveData();
@@ -2257,12 +2300,15 @@ showToast('URLをコピーしました！');
 }
 function switchToRoom(newRoomId, resetToEmpty) {
 currentRoomId = newRoomId;
+isInitialRemoteFetchDone = false;
+pendingLocalSaveBeforeSync = false;
 syncRoomIdToUrl(currentRoomId);
 if (resetToEmpty) {
 tripData = JSON.parse(JSON.stringify(defaultTripData));
 personalChecks = {};
 savePersonalChecks();
 saveData(true);
+pendingLocalSaveBeforeSync = true;
 } else {
 tripData = loadLocalData(currentRoomId);
 personalChecks = loadPersonalChecks(currentRoomId);
