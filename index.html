@@ -1,68 +1,59 @@
 <!-- ... existing code ... -->
-function saveData(skipRemote) {
-registerCurrentTripToMyList();
-try {
-localStorage.setItem(LOCAL_DATA_PREFIX + currentRoomId, JSON.stringify(tripData));
-} catch (e) {}
-if (!skipRemote && !isApplyingRemoteUpdate) {
-if (db && fbModules) {
-try {
-var tripRef = fbModules.doc(db, 'trips', currentRoomId);
-fbModules.setDoc(tripRef, buildSanitizedPayload()).then(function() {
-updateSyncStatusUI(true, 'リアルタイム同期中');
-}).catch(function(err) {
-console.error('Firestore sync error:', err);
-updateSyncStatusUI(false, '保存失敗(ルール確認)');
-showToast('クラウド保存エラー：Firebaseのルール設定を確認してください');
-});
-} catch (err) {}
-} else {
-pendingLocalSaveBeforeSync = true;
-initFirebaseSync();
-}
-}
-}
+<!-- Font Awesome Icons -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<!-- Firebase SDK (compat版: 通常のscriptタグで確実に動作し構文エラーを防ぐ) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+tailwind.config = {
 <!-- ... existing code ... -->
-function subscribeToTripRoom(roomId) {
-if (!db || !fbModules) return;
-if (unsubscribeSnapshot) {
-try { unsubscribeSnapshot(); } catch (e) {}
-unsubscribeSnapshot = null;
+<form id="home-enter-form" onsubmit="enterRoomFromHome(event)" class="mt-3.5 flex flex-col sm:flex-row gap-2.5">
+<input id="home-room-code-input" type="text" required maxlength="16" placeholder="例：ABC123"
+class="flex-1 bg-cream border-2 border-stone-200 focus:border-terracotta-500 rounded-2xl px-4 py-3 text-base sm:text-lg font-num font-bold tracking-widest uppercase text-center sm:text-left focus:outline-none transition" />
+<button type="submit" class="bg-terracotta-500 hover:bg-terracotta-600 text-white font-bold text-sm sm:text-base px-6 py-3 rounded-2xl shadow-sm active:scale-95 transition flex items-center justify-center gap-2 shrink-0 cursor-pointer">
+<span>しおりを開く</span>
+<i class="fa-solid fa-arrow-right"></i>
+</button>
+</form>
+</div>
+<!-- カード2：新しいしおりを作成 -->
+<div class="bg-white rounded-3xl p-5 sm:p-6 shadow-xs border border-stone-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-2xl bg-sage-100 text-sage-700 flex items-center justify-center text-lg shrink-0">
+<i class="fa-solid fa-wand-magic-sparkles"></i>
+</div>
+<div>
+<h2 class="font-display font-bold text-base text-stone-800">新しい旅のしおりを作る</h2>
+<p class="text-xs text-stone-500">自分用・グループ用の新しいしおりと部屋コードを発行します</p>
+</div>
+</div>
+<button type="button" id="home-create-btn" onclick="createNewTripFromHome()" class="bg-sage-600 hover:bg-sage-700 text-white font-bold text-xs sm:text-sm px-5 py-3 rounded-2xl shadow-xs active:scale-95 transition flex items-center justify-center gap-1.5 shrink-0 cursor-pointer">
+<i class="fa-solid fa-plus"></i>
+<span>新規作成する</span>
+</button>
+</div>
+<!-- カード3：マイしおり一覧 -->
+<!-- ... existing code ... -->
+function initFirebaseSync() {
+disconnectFirebase();
+var config = getActiveFirebaseConfig();
+if (!config || typeof firebase === 'undefined') {
+updateSyncStatusUI(false, 'ローカル保存中');
+return;
 }
-var tripRef = fbModules.doc(db, 'trips', roomId);
-// まずサーバー上の既存データを確実に1回取得して反映する
-fbModules.getDoc(tripRef).then(function(initialSnap) {
-isInitialRemoteFetchDone = true;
-updateSyncStatusUI(true, 'リアルタイム同期中');
-if (initialSnap.exists()) {
-applyRemoteDataToLocal(initialSnap.data());
-} else {
-// サーバーにまだ部屋データが存在しない場合、現在のデータを即座にクラウドへ登録する
-fbModules.setDoc(tripRef, buildSanitizedPayload()).catch(function(err) {
-console.error('Initial setDoc error:', err);
-updateSyncStatusUI(false, '書き込み拒否(ルール確認)');
+updateSyncStatusUI(false, 'クラウド接続中...');
+try {
+firebaseAppInstance = firebase.initializeApp(config, 'trip-sync-' + Date.now());
+var auth = firebaseAppInstance.auth();
+auth.signInAnonymously().catch(function() {}).finally(function() {
+if (!firebaseAppInstance) return;
+db = firebaseAppInstance.firestore();
+subscribeToTripRoom(currentRoomId);
 });
+} catch (error) {
+console.error('Firebase initialization failed:', error);
+updateSyncStatusUI(false, '接続エラー');
 }
-pendingLocalSaveBeforeSync = false;
-// その後リアルタイム監視を開始
-unsubscribeSnapshot = fbModules.onSnapshot(
-tripRef,
-function(docSnap) {
-updateSyncStatusUI(true, 'リアルタイム同期中');
-if (docSnap.exists() && !docSnap.metadata.hasPendingWrites) {
-applyRemoteDataToLocal(docSnap.data());
-}
-},
-function(error) {
-console.error('Firestore onSnapshot error:', error);
-updateSyncStatusUI(false, '同期エラー(タップで確認)');
-}
-);
-}).catch(function(err) {
-console.error('Firestore getDoc error:', err);
-isInitialRemoteFetchDone = true;
-updateSyncStatusUI(false, '接続拒否(ルール確認)');
-showToast('クラウド接続エラー：Firebaseのルール設定を確認してください');
-});
 }
 <!-- ... existing code ... -->
