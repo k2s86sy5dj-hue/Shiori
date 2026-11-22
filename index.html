@@ -102,7 +102,7 @@
           </div>
         </div>
         <form onsubmit="enterRoomFromHome(event)" class="mt-3.5 flex flex-col sm:flex-row gap-2.5">
-          <input id="home-room-code-input" type="text" required maxlength="16" placeholder="例：KYOTO1"
+          <input id="home-room-code-input" type="text" required maxlength="16" placeholder="例：ABC123"
                  class="flex-1 bg-cream border-2 border-stone-200 focus:border-terracotta-500 rounded-2xl px-4 py-3 text-base sm:text-lg font-num font-bold tracking-widest uppercase text-center sm:text-left focus:outline-none transition" />
           <button type="submit" class="bg-terracotta-500 hover:bg-terracotta-600 text-white font-bold text-sm sm:text-base px-6 py-3 rounded-2xl shadow-sm active:scale-95 transition flex items-center justify-center gap-2 shrink-0 cursor-pointer">
             <span>しおりを開く</span>
@@ -133,7 +133,7 @@
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
             <i class="fa-solid fa-book-bookmark text-sage-600"></i>
-            <h2 class="font-display font-bold text-base text-stone-800">マイしおり一覧（サンプル含む）</h2>
+            <h2 class="font-display font-bold text-base text-stone-800">マイしおり一覧</h2>
           </div>
           <span class="text-[11px] text-stone-400">タップですぐに開けます</span>
         </div>
@@ -164,9 +164,6 @@
               <span>マイ一覧</span>
               <span id="my-trips-count-badge" class="bg-white/20 text-white font-num text-[10px] px-1.5 py-0.2 rounded-full">1</span>
             </button>
-            <span class="inline-flex items-center gap-1.5 bg-white/15 backdrop-blur-xs px-3 py-1.5 rounded-full text-xs font-medium tracking-wide">
-              <span>✨</span> <span>プロトタイプ版</span>
-            </span>
           </div>
           <div class="flex items-center gap-1.5 sm:gap-2">
             <button type="button" onclick="copyQuickRoomCode()" title="部屋コードをコピー" class="bg-white/15 hover:bg-white/25 text-white active:scale-95 transition px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 cursor-pointer">
@@ -602,19 +599,28 @@
     </div>
   </div>
 
-  <!-- 6.6 持ち物の担当者（複数選択）編集モーダル -->
+  <!-- 6.6 持ち物の名前＆担当者（複数選択）編集モーダル -->
   <div id="packing-assignee-modal" class="fixed inset-0 bg-stone-900/50 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
     <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-pop">
       <div class="flex items-center justify-between mb-3">
-        <h3 class="font-display font-bold text-lg text-stone-800">担当者を複数選択</h3>
+        <h3 class="font-display font-bold text-lg text-stone-800">持ち物を編集</h3>
         <button type="button" onclick="closeModal('packing-assignee-modal')" class="text-stone-400 hover:text-stone-700 p-1"><i class="fa-solid fa-xmark text-xl"></i></button>
       </div>
-      <p id="edit-packing-item-title" class="text-xs font-bold text-sage-700 bg-sage-50 px-3 py-2 rounded-xl mb-4"></p>
       <input type="hidden" id="edit-packing-item-id" />
+      <div class="mb-4">
+        <label class="block text-xs font-bold text-stone-600 mb-1">持ち物の名前</label>
+        <input id="edit-packing-item-name" type="text" required placeholder="持ち物名を入力" class="w-full bg-cream border border-stone-200 rounded-xl px-3.5 py-2 text-sm font-medium focus:outline-none focus:border-sage-500" />
+      </div>
+      <div class="mb-1.5 flex items-center justify-between">
+        <label class="block text-xs font-bold text-stone-600">担当者（複数選択可）</label>
+        <button type="button" onclick="selectAllMembersForEditPacking()" class="text-[11px] font-bold text-sage-600 hover:text-sage-700 bg-sage-50 px-2 py-0.5 rounded-md cursor-pointer">
+          メンバー全員を選択
+        </button>
+      </div>
       <div id="edit-packing-assignee-options" class="space-y-2 mb-5 max-h-56 overflow-y-auto"></div>
       <div class="flex justify-end gap-2">
         <button type="button" onclick="closeModal('packing-assignee-modal')" class="px-4 py-2.5 rounded-xl text-sm font-bold text-stone-500 hover:bg-stone-100">キャンセル</button>
-        <button type="button" onclick="saveEditedPackingAssignees()" class="px-5 py-2.5 rounded-xl text-sm font-bold bg-sage-600 hover:bg-sage-700 text-white shadow-sm">決定する</button>
+        <button type="button" onclick="saveEditedPackingAssignees()" class="px-5 py-2.5 rounded-xl text-sm font-bold bg-sage-600 hover:bg-sage-700 text-white shadow-sm">保存する</button>
       </div>
     </div>
   </div>
@@ -642,7 +648,7 @@
         <form onsubmit="joinExistingRoom(event)" class="border border-stone-200/80 rounded-2xl p-4 space-y-2.5">
           <h4 class="font-display font-bold text-sm text-stone-800">🚪 別の部屋コードに切り替える</h4>
           <div class="flex gap-2">
-            <input id="join-room-id-input" type="text" required placeholder="例：KYOTO1" class="flex-1 bg-cream border border-stone-200 rounded-xl px-3 py-2 text-xs sm:text-sm font-num uppercase focus:outline-none focus:border-sage-500" />
+            <input id="join-room-id-input" type="text" required placeholder="例：ABC123" class="flex-1 bg-cream border border-stone-200 rounded-xl px-3 py-2 text-xs sm:text-sm font-num uppercase focus:outline-none focus:border-sage-500" />
             <button type="submit" class="bg-stone-800 hover:bg-stone-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition shrink-0">
               切り替える
             </button>
@@ -682,11 +688,11 @@
     </div>
   </div>
 
-  <!-- ==================== JavaScript ロジック（軽量・確実動作プロトタイプ版） ==================== -->
+  <!-- ==================== JavaScript ロジック ==================== -->
   <script>
-    var LOCAL_DATA_PREFIX = 'proto_shiori_room_';
-    var PERSONAL_CHECK_PREFIX = 'proto_shiori_checks_';
-    var MY_TRIPS_INDEX_KEY = 'proto_shiori_my_trips_v1';
+    var LOCAL_DATA_PREFIX = 'shiori_app_room_';
+    var PERSONAL_CHECK_PREFIX = 'shiori_app_checks_';
+    var MY_TRIPS_INDEX_KEY = 'shiori_app_my_trips_v1';
 
     var DEFAULT_CATEGORIES = [
       { id: 'spot', emoji: '⛩️', label: '観光・スポット', badgeBg: 'bg-sage-100 text-sage-700' },
@@ -694,53 +700,6 @@
       { id: 'move', emoji: '🚄', label: '移動・交通', badgeBg: 'bg-sky-100 text-sky-700' },
       { id: 'hotel', emoji: '🏨', label: 'ホテル・宿泊', badgeBg: 'bg-amber-100 text-amber-700' }
     ];
-
-    // サンプルのしおりデータ（KYOTO1）
-    var sampleKyotoData = {
-      title: '京都・嵐山グルメ女子旅 🍵',
-      startDate: '',
-      dates: '1泊2日・秋のおすすめプラン',
-      categories: JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)),
-      members: [
-        { id: 'm1', name: '自分', color: 'bg-sage-600' },
-        { id: 'm2', name: 'あやか', color: 'bg-terracotta-500' },
-        { id: 'm3', name: 'みさき', color: 'bg-amber-600' }
-      ],
-      days: [
-        {
-          id: 'day1',
-          label: '1日目',
-          dateText: '1日目・嵐山エリア散策',
-          isoDate: '',
-          items: [
-            { id: 's1', time: '09:30', category: 'move', title: '京都駅 新幹線中央口 集合', mapQuery: '京都駅', refUrl: '', memo: 'コインロッカーに大きい荷物を預ける！' },
-            { id: 's2', time: '11:00', category: 'spot', title: '嵐山 竹林の小径・渡月橋', mapQuery: '嵐山 竹林の小径', refUrl: '', memo: '午前中の空いているうちに写真撮影📸' },
-            { id: 's3', time: '12:30', category: 'food', title: '湯豆腐と京おばんざいランチ', mapQuery: '嵐山 湯豆腐', refUrl: '', memo: '12:30に3名で予約済み' }
-          ]
-        },
-        {
-          id: 'day2',
-          label: '2日目',
-          dateText: '2日目・祇園＆カフェ巡り',
-          isoDate: '',
-          items: [
-            { id: 's4', time: '10:00', category: 'spot', title: '清水寺・二年坂散策', mapQuery: '清水寺', refUrl: '', memo: '食べ歩きスイーツもチェック' }
-          ]
-        }
-      ],
-      packing: [
-        { id: 'p1', name: 'モバイルバッテリー', assigneeIds: ['m1', 'm2'] },
-        { id: 'p2', name: '常備薬・絆創膏', assigneeIds: ['m3'] },
-        { id: 'p3', name: 'スマホ充電器', assigneeIds: ['all'] }
-      ],
-      wishlist: [
-        { id: 'w1', name: '宇治抹茶ティラミス', category: 'food', area: '河原町', mapQuery: '抹茶館 京都河原町', refUrl: '', memo: '整理券を早めに取るのがおすすめ！', votes: 3, votedByMe: true },
-        { id: 'w2', name: '八坂庚申堂（くくり猿）', category: 'spot', area: '東山', mapQuery: '八坂庚申堂', refUrl: '', memo: 'カラフルで写真映えスポット', votes: 2, votedByMe: false }
-      ],
-      notes: [
-        { id: 'n1', title: 'ホテル予約情報', content: 'ホテル京阪 京都グランデ\nチェックイン 15:00〜 / 予約番号: #KP-8841', pinned: true, updatedAt: 'サンプル' }
-      ]
-    };
 
     var defaultTripData = {
       title: '新しいグループ旅行 ✈️',
@@ -764,7 +723,7 @@
       notes: []
     };
 
-    var currentRoomId = 'KYOTO1';
+    var currentRoomId = '';
     var tripData = null;
     var personalChecks = {};
     var activeTab = 'schedule';
@@ -781,32 +740,7 @@
       return code;
     }
 
-    function ensureSampleSeeded() {
-      try {
-        if (!localStorage.getItem(LOCAL_DATA_PREFIX + 'KYOTO1')) {
-          localStorage.setItem(LOCAL_DATA_PREFIX + 'KYOTO1', JSON.stringify(sampleKyotoData));
-        }
-        var list = loadMyTripsIndex();
-        if (list.length === 0) {
-          saveMyTripsIndex([{
-            roomId: 'KYOTO1',
-            title: sampleKyotoData.title,
-            dates: sampleKyotoData.dates,
-            memberCount: sampleKyotoData.members.length,
-            lastOpenedAt: Date.now()
-          }]);
-        }
-      } catch (e) {}
-    }
-
     function loadLocalData(roomId) {
-      if (roomId === 'KYOTO1') {
-        try {
-          var s = localStorage.getItem(LOCAL_DATA_PREFIX + 'KYOTO1');
-          if (s) return JSON.parse(s);
-        } catch (e) {}
-        return JSON.parse(JSON.stringify(sampleKyotoData));
-      }
       try {
         var saved = localStorage.getItem(LOCAL_DATA_PREFIX + roomId);
         if (saved) {
@@ -1726,12 +1660,12 @@
 
         var badgesHtml = assignees.map(function(aid) {
           if (aid === 'all') {
-            return '<button type="button" onclick="openEditPackingAssignees(\'' + item.id + '\')" class="bg-stone-600 text-white text-[11px] font-bold px-2.5 py-1 rounded-full shadow-2xs active:scale-95 transition cursor-pointer">全員各自</button>';
+            return '<button type="button" onclick="openEditPackingAssignees(\'' + item.id + '\')" title="タップで編集" class="bg-stone-600 text-white text-[11px] font-bold px-2.5 py-1 rounded-full shadow-2xs active:scale-95 transition cursor-pointer">全員各自</button>';
           }
           var member = tripData.members.find(function(m) { return m.id === aid; });
           var name = member ? member.name : '未定';
           var color = member ? member.color : 'bg-stone-400';
-          return '<button type="button" onclick="openEditPackingAssignees(\'' + item.id + '\')" class="' + color + ' text-white text-[11px] font-bold px-2.5 py-1 rounded-full shadow-2xs active:scale-95 transition cursor-pointer">' + escapeHtml(name) + '</button>';
+          return '<button type="button" onclick="openEditPackingAssignees(\'' + item.id + '\')" title="タップで編集" class="' + color + ' text-white text-[11px] font-bold px-2.5 py-1 rounded-full shadow-2xs active:scale-95 transition cursor-pointer">' + escapeHtml(name) + '</button>';
         }).join('');
 
         var rowCls = isChecked ? 'opacity-65 bg-stone-50' : '';
@@ -1748,7 +1682,8 @@
             '</button>' +
             '<div class="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">' +
               badgesHtml +
-              '<button type="button" onclick="deletePacking(\'' + item.id + '\')" class="text-stone-300 hover:text-terracotta-500 p-1 cursor-pointer"><i class="fa-solid fa-xmark"></i></button>' +
+              '<button type="button" onclick="openEditPackingAssignees(\'' + item.id + '\')" title="名前・担当者を編集" class="text-stone-400 hover:text-sage-600 p-1.5 rounded-lg hover:bg-sage-50 transition cursor-pointer"><i class="fa-solid fa-pen text-xs"></i></button>' +
+              '<button type="button" onclick="deletePacking(\'' + item.id + '\')" title="削除" class="text-stone-300 hover:text-terracotta-500 p-1.5 rounded-lg hover:bg-terracotta-50 transition cursor-pointer"><i class="fa-solid fa-xmark"></i></button>' +
             '</div>' +
           '</div>'
         );
@@ -1784,10 +1719,17 @@
       var item = tripData.packing.find(function(p) { return p.id === id; });
       if (!item) return;
       document.getElementById('edit-packing-item-id').value = item.id;
-      document.getElementById('edit-packing-item-title').textContent = '🎒 ' + item.name;
+      document.getElementById('edit-packing-item-name').value = item.name;
       editingPackingAssigneeIds = getItemAssigneeIds(item).slice();
       renderEditPackingAssigneeOptions();
       openModal('packing-assignee-modal');
+    }
+
+    function selectAllMembersForEditPacking() {
+      editingPackingAssigneeIds = tripData.members.length > 0
+        ? tripData.members.map(function(m) { return m.id; })
+        : ['all'];
+      renderEditPackingAssigneeOptions();
     }
 
     function renderEditPackingAssigneeOptions() {
@@ -1834,13 +1776,17 @@
 
     function saveEditedPackingAssignees() {
       var id = document.getElementById('edit-packing-item-id').value;
+      var newName = document.getElementById('edit-packing-item-name').value.trim();
       var item = tripData.packing.find(function(p) { return p.id === id; });
       if (item && editingPackingAssigneeIds.length > 0) {
+        if (newName) {
+          item.name = newName;
+        }
         item.assigneeIds = editingPackingAssigneeIds.slice();
         delete item.assigneeId;
         saveData();
         renderPackingSection();
-        showToast('担当者を更新しました');
+        showToast('持ち物を更新しました');
       }
       closeModal('packing-assignee-modal');
     }
@@ -2191,9 +2137,16 @@
     }
 
     function bootApp() {
-      ensureSampleSeeded();
-      tripData = loadLocalData(currentRoomId);
-      personalChecks = loadPersonalChecks(currentRoomId);
+      var list = loadMyTripsIndex();
+      if (list.length > 0) {
+        currentRoomId = list[0].roomId;
+        tripData = loadLocalData(currentRoomId);
+        personalChecks = loadPersonalChecks(currentRoomId);
+      } else {
+        currentRoomId = generateRoomCode();
+        tripData = JSON.parse(JSON.stringify(defaultTripData));
+        personalChecks = {};
+      }
       showHomeView();
     }
 
