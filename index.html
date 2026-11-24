@@ -12,6 +12,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Plus+Jakarta+Sans:wght@600;700&family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet" />
   <!-- Font Awesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <!-- Firebase SDK (compat版) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
   <script>
     tailwind.config = {
@@ -67,7 +71,7 @@
 </head>
 <body class="min-h-screen flex flex-col font-sans selection:bg-terracotta-100 selection:text-terracotta-600">
 
-  <!-- ==================== 0. ホーム画面（部屋コード入力・新規作成・マイしおりロビー） ==================== -->
+  <!-- ==================== 0. ホーム画面 ==================== -->
   <div id="home-portal-view" class="min-h-screen flex flex-col bg-cream">
     <div class="relative bg-sage-700 text-white overflow-hidden shadow-md">
       <div class="absolute inset-0 opacity-15 pointer-events-none"
@@ -101,7 +105,7 @@
             <p class="text-xs text-stone-500">共有された6桁の部屋コード（合言葉）を入力してください</p>
           </div>
         </div>
-        <form onsubmit="enterRoomFromHome(event)" class="mt-3.5 flex flex-col sm:flex-row gap-2.5">
+        <form id="home-enter-form" onsubmit="enterRoomFromHome(event)" class="mt-3.5 flex flex-col sm:flex-row gap-2.5">
           <input id="home-room-code-input" type="text" required maxlength="16" placeholder="例：ABC123"
                  class="flex-1 bg-cream border-2 border-stone-200 focus:border-terracotta-500 rounded-2xl px-4 py-3 text-base sm:text-lg font-num font-bold tracking-widest uppercase text-center sm:text-left focus:outline-none transition" />
           <button type="submit" class="bg-terracotta-500 hover:bg-terracotta-600 text-white font-bold text-sm sm:text-base px-6 py-3 rounded-2xl shadow-sm active:scale-95 transition flex items-center justify-center gap-2 shrink-0 cursor-pointer">
@@ -122,7 +126,7 @@
             <p class="text-xs text-stone-500">自分用・グループ用の新しいしおりと部屋コードを発行します</p>
           </div>
         </div>
-        <button type="button" onclick="createNewTripFromHome()" class="bg-sage-600 hover:bg-sage-700 text-white font-bold text-xs sm:text-sm px-5 py-3 rounded-2xl shadow-xs active:scale-95 transition flex items-center justify-center gap-1.5 shrink-0 cursor-pointer">
+        <button type="button" id="home-create-btn" onclick="createNewTripFromHome()" class="bg-sage-600 hover:bg-sage-700 text-white font-bold text-xs sm:text-sm px-5 py-3 rounded-2xl shadow-xs active:scale-95 transition flex items-center justify-center gap-1.5 shrink-0 cursor-pointer">
           <i class="fa-solid fa-plus"></i>
           <span>新規作成する</span>
         </button>
@@ -163,6 +167,9 @@
               <i class="fa-solid fa-book-bookmark"></i>
               <span>マイ一覧</span>
               <span id="my-trips-count-badge" class="bg-white/20 text-white font-num text-[10px] px-1.5 py-0.2 rounded-full">1</span>
+            </button>
+            <button type="button" onclick="forceManualSync()" id="sync-status-badge" title="タップして手動再同期" class="inline-flex items-center gap-1.5 bg-white/15 hover:bg-white/25 backdrop-blur-xs px-3 py-1.5 rounded-full text-xs font-medium tracking-wide transition cursor-pointer">
+              <span>🟡</span> <span>準備中</span>
             </button>
           </div>
           <div class="flex items-center gap-1.5 sm:gap-2">
@@ -356,7 +363,7 @@
     <div class="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl animate-pop max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between mb-4">
         <h3 id="schedule-modal-title" class="font-display font-bold text-lg text-stone-800">予定を追加</h3>
-        <button type="button" onclick="closeModal('schedule-modal')" class="text-stone-400 hover:text-stone-700 p-1"><i class="fa-solid fa-xmark text-xl"></i></button>
+        <button type="button" onclick="closeModal('schedule-modal')" class="text-stone-400 hover:text-stone-700 p-1 cursor-pointer"><i class="fa-solid fa-xmark text-xl"></i></button>
       </div>
       <form onsubmit="saveScheduleItem(event)" class="space-y-3.5">
         <input type="hidden" id="sched-id" />
@@ -368,7 +375,7 @@
           <div>
             <div class="flex items-center justify-between mb-1">
               <label class="block text-xs font-bold text-stone-600">カテゴリ</label>
-              <button type="button" onclick="openCategoryModal()" class="text-[11px] font-bold text-sage-600 hover:text-sage-700 flex items-center gap-1 bg-sage-50 px-2 py-0.5 rounded-md">
+              <button type="button" onclick="openCategoryModal()" class="text-[11px] font-bold text-sage-600 hover:text-sage-700 flex items-center gap-1 bg-sage-50 px-2 py-0.5 rounded-md cursor-pointer">
                 <i class="fa-solid fa-sliders text-[10px]"></i> 追加・削除
               </button>
             </div>
@@ -396,8 +403,8 @@
           <textarea id="sched-memo" rows="2" placeholder="例：改札前に集合！予約番号など" class="w-full bg-cream border border-stone-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:border-sage-500"></textarea>
         </div>
         <div class="flex justify-end gap-2 pt-2">
-          <button type="button" onclick="closeModal('schedule-modal')" class="px-4 py-2.5 rounded-xl text-sm font-bold text-stone-500 hover:bg-stone-100">キャンセル</button>
-          <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-bold bg-sage-600 hover:bg-sage-700 text-white shadow-sm">保存する</button>
+          <button type="button" onclick="closeModal('schedule-modal')" class="px-4 py-2.5 rounded-xl text-sm font-bold text-stone-500 hover:bg-stone-100 cursor-pointer">キャンセル</button>
+          <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-bold bg-sage-600 hover:bg-sage-700 text-white shadow-sm cursor-pointer">保存する</button>
         </div>
       </form>
     </div>
@@ -408,7 +415,7 @@
     <div class="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl animate-pop max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between mb-4">
         <h3 class="font-display font-bold text-lg text-stone-800">行きたい所・グルメを追加</h3>
-        <button type="button" onclick="closeModal('wish-modal')" class="text-stone-400 hover:text-stone-700 p-1"><i class="fa-solid fa-xmark text-xl"></i></button>
+        <button type="button" onclick="closeModal('wish-modal')" class="text-stone-400 hover:text-stone-700 p-1 cursor-pointer"><i class="fa-solid fa-xmark text-xl"></i></button>
       </div>
       <form onsubmit="saveWishItem(event)" class="space-y-3.5">
         <div>
@@ -446,8 +453,8 @@
           <textarea id="wish-memo" rows="2" placeholder="例：SNSで話題の限定メニューが食べたい！" class="w-full bg-cream border border-stone-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:border-terracotta-500"></textarea>
         </div>
         <div class="flex justify-end gap-2 pt-2">
-          <button type="button" onclick="closeModal('wish-modal')" class="px-4 py-2.5 rounded-xl text-sm font-bold text-stone-500 hover:bg-stone-100">キャンセル</button>
-          <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-bold bg-terracotta-500 hover:bg-terracotta-600 text-white shadow-sm">追加する</button>
+          <button type="button" onclick="closeModal('wish-modal')" class="px-4 py-2.5 rounded-xl text-sm font-bold text-stone-500 hover:bg-stone-100 cursor-pointer">キャンセル</button>
+          <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-bold bg-terracotta-500 hover:bg-terracotta-600 text-white shadow-sm cursor-pointer">追加する</button>
         </div>
       </form>
     </div>
@@ -458,7 +465,7 @@
     <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-pop">
       <div class="flex items-center justify-between mb-3">
         <h3 class="font-display font-bold text-lg text-stone-800">しおりに組み込む</h3>
-        <button type="button" onclick="closeModal('promote-wish-modal')" class="text-stone-400 hover:text-stone-700 p-1"><i class="fa-solid fa-xmark text-xl"></i></button>
+        <button type="button" onclick="closeModal('promote-wish-modal')" class="text-stone-400 hover:text-stone-700 p-1 cursor-pointer"><i class="fa-solid fa-xmark text-xl"></i></button>
       </div>
       <p id="promote-wish-target-name" class="text-xs font-bold text-sage-700 bg-sage-50 px-3 py-2 rounded-xl mb-4"></p>
       <form onsubmit="confirmPromoteWish(event)" class="space-y-3.5">
@@ -474,8 +481,8 @@
           </div>
         </div>
         <div class="flex justify-end gap-2 pt-2">
-          <button type="button" onclick="closeModal('promote-wish-modal')" class="px-4 py-2.5 rounded-xl text-sm font-bold text-stone-500 hover:bg-stone-100">キャンセル</button>
-          <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-bold bg-sage-600 hover:bg-sage-700 text-white shadow-sm">しおりに追加</button>
+          <button type="button" onclick="closeModal('promote-wish-modal')" class="px-4 py-2.5 rounded-xl text-sm font-bold text-stone-500 hover:bg-stone-100 cursor-pointer">キャンセル</button>
+          <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-bold bg-sage-600 hover:bg-sage-700 text-white shadow-sm cursor-pointer">しおりに追加</button>
         </div>
       </form>
     </div>
@@ -486,7 +493,7 @@
     <div class="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl animate-pop">
       <div class="flex items-center justify-between mb-4">
         <h3 id="note-modal-title" class="font-display font-bold text-lg text-stone-800">メモを作成</h3>
-        <button type="button" onclick="closeModal('note-modal')" class="text-stone-400 hover:text-stone-700 p-1"><i class="fa-solid fa-xmark text-xl"></i></button>
+        <button type="button" onclick="closeModal('note-modal')" class="text-stone-400 hover:text-stone-700 p-1 cursor-pointer"><i class="fa-solid fa-xmark text-xl"></i></button>
       </div>
       <form onsubmit="saveNoteItem(event)" class="space-y-3.5">
         <input type="hidden" id="note-id" />
@@ -505,8 +512,8 @@
           </label>
         </div>
         <div class="flex justify-end gap-2 pt-2">
-          <button type="button" onclick="closeModal('note-modal')" class="px-4 py-2.5 rounded-xl text-sm font-bold text-stone-500 hover:bg-stone-100">キャンセル</button>
-          <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-bold bg-sage-600 hover:bg-sage-700 text-white shadow-sm">保存する</button>
+          <button type="button" onclick="closeModal('note-modal')" class="px-4 py-2.5 rounded-xl text-sm font-bold text-stone-500 hover:bg-stone-100 cursor-pointer">キャンセル</button>
+          <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-bold bg-sage-600 hover:bg-sage-700 text-white shadow-sm cursor-pointer">保存する</button>
         </div>
       </form>
     </div>
@@ -517,7 +524,7 @@
     <div class="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl animate-pop">
       <div class="flex items-center justify-between mb-4">
         <h3 class="font-display font-bold text-lg text-stone-800">旅行の基本情報を編集</h3>
-        <button type="button" onclick="closeModal('trip-edit-modal')" class="text-stone-400 hover:text-stone-700 p-1"><i class="fa-solid fa-xmark text-xl"></i></button>
+        <button type="button" onclick="closeModal('trip-edit-modal')" class="text-stone-400 hover:text-stone-700 p-1 cursor-pointer"><i class="fa-solid fa-xmark text-xl"></i></button>
       </div>
       <form onsubmit="saveTripMeta(event)" class="space-y-3.5">
         <div>
@@ -533,8 +540,8 @@
           <input id="edit-trip-dates" type="text" required placeholder="例：2026.12.01 (火) - 12.02 (水) ・ 1泊2日" class="w-full bg-cream border border-stone-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:border-sage-500" />
         </div>
         <div class="flex justify-end gap-2 pt-2">
-          <button type="button" onclick="closeModal('trip-edit-modal')" class="px-4 py-2.5 rounded-xl text-sm font-bold text-stone-500 hover:bg-stone-100">キャンセル</button>
-          <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-bold bg-sage-600 hover:bg-sage-700 text-white shadow-sm">更新する</button>
+          <button type="button" onclick="closeModal('trip-edit-modal')" class="px-4 py-2.5 rounded-xl text-sm font-bold text-stone-500 hover:bg-stone-100 cursor-pointer">キャンセル</button>
+          <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-bold bg-sage-600 hover:bg-sage-700 text-white shadow-sm cursor-pointer">更新する</button>
         </div>
       </form>
     </div>
@@ -545,12 +552,12 @@
     <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-pop">
       <div class="flex items-center justify-between mb-4">
         <h3 class="font-display font-bold text-lg text-stone-800">参加メンバー管理</h3>
-        <button type="button" onclick="closeModal('member-modal')" class="text-stone-400 hover:text-stone-700 p-1"><i class="fa-solid fa-xmark text-xl"></i></button>
+        <button type="button" onclick="closeModal('member-modal')" class="text-stone-400 hover:text-stone-700 p-1 cursor-pointer"><i class="fa-solid fa-xmark text-xl"></i></button>
       </div>
       <div id="modal-member-list" class="space-y-2 mb-4 max-h-48 overflow-y-auto"></div>
       <form onsubmit="addMember(event)" class="flex gap-2">
         <input id="new-member-name" type="text" required placeholder="新しいメンバー名" class="flex-1 bg-cream border border-stone-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-sage-500" />
-        <button type="submit" class="bg-sage-600 hover:bg-sage-700 text-white font-bold text-xs px-4 py-2 rounded-xl">追加</button>
+        <button type="submit" class="bg-sage-600 hover:bg-sage-700 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer">追加</button>
       </form>
     </div>
   </div>
@@ -564,8 +571,8 @@
       <h3 class="font-display font-bold text-lg text-stone-800 mb-1">しおりをすべて空にしますか？</h3>
       <p class="text-xs text-stone-500 mb-5">入力した予定・持ち物・行きたい所・メモがクリアされ、まっさらな状態に戻ります。</p>
       <div class="flex gap-2 justify-center">
-        <button type="button" onclick="closeModal('reset-modal')" class="flex-1 py-2.5 rounded-xl text-sm font-bold text-stone-600 bg-stone-100 hover:bg-stone-200">キャンセル</button>
-        <button type="button" onclick="confirmResetData()" class="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-terracotta-500 hover:bg-terracotta-600">クリアする</button>
+        <button type="button" onclick="closeModal('reset-modal')" class="flex-1 py-2.5 rounded-xl text-sm font-bold text-stone-600 bg-stone-100 hover:bg-stone-200 cursor-pointer">キャンセル</button>
+        <button type="button" onclick="confirmResetData()" class="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-terracotta-500 hover:bg-terracotta-600 cursor-pointer">クリアする</button>
       </div>
     </div>
   </div>
@@ -575,7 +582,7 @@
     <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-pop">
       <div class="flex items-center justify-between mb-4">
         <h3 class="font-display font-bold text-lg text-stone-800">予定カテゴリの追加・削除</h3>
-        <button type="button" onclick="closeModal('category-modal')" class="text-stone-400 hover:text-stone-700 p-1"><i class="fa-solid fa-xmark text-xl"></i></button>
+        <button type="button" onclick="closeModal('category-modal')" class="text-stone-400 hover:text-stone-700 p-1 cursor-pointer"><i class="fa-solid fa-xmark text-xl"></i></button>
       </div>
       <div id="modal-category-list" class="space-y-2 mb-4 max-h-48 overflow-y-auto"></div>
       <form onsubmit="addScheduleCategory(event)" class="space-y-2.5 pt-2 border-t border-stone-100">
@@ -593,7 +600,7 @@
             <option value="bg-purple-100 text-purple-700">💜 パープル</option>
             <option value="bg-rose-100 text-rose-700">🩷 ピンク</option>
           </select>
-          <button type="submit" class="bg-sage-600 hover:bg-sage-700 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-xs">追加する</button>
+          <button type="submit" class="bg-sage-600 hover:bg-sage-700 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-xs cursor-pointer">追加する</button>
         </div>
       </form>
     </div>
@@ -604,7 +611,7 @@
     <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-pop">
       <div class="flex items-center justify-between mb-3">
         <h3 class="font-display font-bold text-lg text-stone-800">持ち物を編集</h3>
-        <button type="button" onclick="closeModal('packing-assignee-modal')" class="text-stone-400 hover:text-stone-700 p-1"><i class="fa-solid fa-xmark text-xl"></i></button>
+        <button type="button" onclick="closeModal('packing-assignee-modal')" class="text-stone-400 hover:text-stone-700 p-1 cursor-pointer"><i class="fa-solid fa-xmark text-xl"></i></button>
       </div>
       <input type="hidden" id="edit-packing-item-id" />
       <div class="mb-4">
@@ -619,8 +626,8 @@
       </div>
       <div id="edit-packing-assignee-options" class="space-y-2 mb-5 max-h-56 overflow-y-auto"></div>
       <div class="flex justify-end gap-2">
-        <button type="button" onclick="closeModal('packing-assignee-modal')" class="px-4 py-2.5 rounded-xl text-sm font-bold text-stone-500 hover:bg-stone-100">キャンセル</button>
-        <button type="button" onclick="saveEditedPackingAssignees()" class="px-5 py-2.5 rounded-xl text-sm font-bold bg-sage-600 hover:bg-sage-700 text-white shadow-sm">保存する</button>
+        <button type="button" onclick="closeModal('packing-assignee-modal')" class="px-4 py-2.5 rounded-xl text-sm font-bold text-stone-500 hover:bg-stone-100 cursor-pointer">キャンセル</button>
+        <button type="button" onclick="saveEditedPackingAssignees()" class="px-5 py-2.5 rounded-xl text-sm font-bold bg-sage-600 hover:bg-sage-700 text-white shadow-sm cursor-pointer">保存する</button>
       </div>
     </div>
   </div>
@@ -630,7 +637,7 @@
     <div class="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl animate-pop">
       <div class="flex items-center justify-between mb-4">
         <h3 class="font-display font-bold text-lg text-stone-800">🔗 部屋コード共有・切替</h3>
-        <button type="button" onclick="closeModal('share-modal')" class="text-stone-400 hover:text-stone-700 p-1"><i class="fa-solid fa-xmark text-xl"></i></button>
+        <button type="button" onclick="closeModal('share-modal')" class="text-stone-400 hover:text-stone-700 p-1 cursor-pointer"><i class="fa-solid fa-xmark text-xl"></i></button>
       </div>
 
       <div class="space-y-4">
@@ -639,8 +646,8 @@
             <span class="text-xs font-bold text-sage-700">現在の部屋コード（合言葉）</span>
             <span id="modal-room-id" class="font-num font-bold text-base bg-white px-3 py-0.5 rounded-lg border border-sage-200 text-sage-700">------</span>
           </div>
-          <p class="text-xs text-stone-600">この部屋コードを友達に教えると、同じしおりを開けます。</p>
-          <button type="button" onclick="copyQuickRoomCode()" class="w-full bg-terracotta-500 hover:bg-terracotta-600 text-white font-bold text-xs py-2.5 rounded-xl shadow-xs active:scale-95 transition flex items-center justify-center gap-1.5">
+          <p class="text-xs text-stone-600">この部屋コードを友達や別端末に入力すると、同じしおりをリアルタイムで共有できます。</p>
+          <button type="button" onclick="copyQuickRoomCode()" class="w-full bg-terracotta-500 hover:bg-terracotta-600 text-white font-bold text-xs py-2.5 rounded-xl shadow-xs active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer">
             <i class="fa-regular fa-copy"></i> <span>部屋コードをコピーする</span>
           </button>
         </div>
@@ -649,7 +656,7 @@
           <h4 class="font-display font-bold text-sm text-stone-800">🚪 別の部屋コードに切り替える</h4>
           <div class="flex gap-2">
             <input id="join-room-id-input" type="text" required placeholder="例：ABC123" class="flex-1 bg-cream border border-stone-200 rounded-xl px-3 py-2 text-xs sm:text-sm font-num uppercase focus:outline-none focus:border-sage-500" />
-            <button type="submit" class="bg-stone-800 hover:bg-stone-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition shrink-0">
+            <button type="submit" class="bg-stone-800 hover:bg-stone-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition shrink-0 cursor-pointer">
               切り替える
             </button>
           </div>
@@ -666,14 +673,14 @@
           <i class="fa-solid fa-book-bookmark text-terracotta-500"></i>
           <span>マイしおり一覧</span>
         </h3>
-        <button type="button" onclick="closeModal('my-trips-modal')" class="text-stone-400 hover:text-stone-700 p-1"><i class="fa-solid fa-xmark text-xl"></i></button>
+        <button type="button" onclick="closeModal('my-trips-modal')" class="text-stone-400 hover:text-stone-700 p-1 cursor-pointer"><i class="fa-solid fa-xmark text-xl"></i></button>
       </div>
       <p class="text-xs text-stone-500 mb-4">作成したしおりや、開いたしおりが保存されています。</p>
 
       <div id="my-trips-list" class="space-y-2.5 overflow-y-auto flex-1 pr-1 mb-4"></div>
 
       <div class="pt-3 border-t border-stone-100 space-y-2.5">
-        <button type="button" onclick="createNewRoomFromList()" class="w-full py-2.5 px-4 rounded-2xl text-xs sm:text-sm font-bold bg-sage-600 hover:bg-sage-700 text-white shadow-xs active:scale-95 transition flex items-center justify-center gap-1.5">
+        <button type="button" onclick="createNewRoomFromList()" class="w-full py-2.5 px-4 rounded-2xl text-xs sm:text-sm font-bold bg-sage-600 hover:bg-sage-700 text-white shadow-xs active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer">
           <i class="fa-solid fa-plus"></i> 新しい旅行のしおりを作る
         </button>
       </div>
@@ -690,9 +697,25 @@
 
   <!-- ==================== JavaScript ロジック ==================== -->
   <script>
+    var DEFAULT_FIREBASE_CONFIG = {
+      apiKey: "AIzaSyACB4hw0Igthc8oTnM7mxEbwfoZbZxruU8",
+      authDomain: "siori-eccf8.firebaseapp.com",
+      projectId: "siori-eccf8",
+      storageBucket: "siori-eccf8.firebasestorage.app",
+      messagingSenderId: "322154004726",
+      appId: "1:322154004726:web:575d6fa333fa2b3acbecd7",
+      measurementId: "G-7J8H632QSE"
+    };
+
     var LOCAL_DATA_PREFIX = 'shiori_app_room_';
     var PERSONAL_CHECK_PREFIX = 'shiori_app_checks_';
     var MY_TRIPS_INDEX_KEY = 'shiori_app_my_trips_v1';
+
+    var firebaseAppInstance = null;
+    var db = null;
+    var unsubscribeSnapshot = null;
+    var isApplyingRemoteUpdate = false;
+    var isInitialRemoteFetchDone = false;
 
     var DEFAULT_CATEGORIES = [
       { id: 'spot', emoji: '⛩️', label: '観光・スポット', badgeBg: 'bg-sage-100 text-sage-700' },
@@ -724,12 +747,14 @@
     };
 
     var currentRoomId = '';
-    var tripData = null;
+    var tripData = JSON.parse(JSON.stringify(defaultTripData));
     var personalChecks = {};
     var activeTab = 'schedule';
     var selectedDayId = 'day1';
     var wishFilter = 'all';
     var packingFilter = 'all';
+    var selectedNewPackingAssignees = ['m1'];
+    var editingPackingAssigneeIds = [];
 
     function generateRoomCode() {
       var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -786,13 +811,13 @@
     }
 
     function registerCurrentTripToMyList() {
-      if (!tripData) return;
+      if (!currentRoomId) return;
       var list = loadMyTripsIndex();
       var idx = list.findIndex(function(item) { return item.roomId === currentRoomId; });
       var entry = {
         roomId: currentRoomId,
-        title: tripData.title || '新しいグループ旅行 ✈️',
-        dates: tripData.dates || '日程未設定',
+        title: tripData.title || defaultTripData.title,
+        dates: tripData.dates || defaultTripData.dates,
         memberCount: Array.isArray(tripData.members) ? tripData.members.length : 1,
         lastOpenedAt: Date.now()
       };
@@ -804,14 +829,159 @@
       saveMyTripsIndex(list);
       var badge = document.getElementById('my-trips-count-badge');
       if (badge) badge.textContent = String(list.length);
-      renderHomeMyTripsList();
     }
 
-    function saveData() {
+    function saveData(skipRemote) {
       registerCurrentTripToMyList();
       try {
         localStorage.setItem(LOCAL_DATA_PREFIX + currentRoomId, JSON.stringify(tripData));
       } catch (e) {}
+
+      if (!skipRemote && !isApplyingRemoteUpdate) {
+        if (db && isInitialRemoteFetchDone) {
+          pushTripToCloud();
+        } else if (!db) {
+          initFirebaseSync(true);
+        }
+      }
+    }
+
+    function buildSanitizedPayload() {
+      var sanitizedPacking = (tripData.packing || []).map(function(item) {
+        return {
+          id: item.id,
+          name: item.name,
+          assigneeIds: getItemAssigneeIds(item)
+        };
+      });
+      return {
+        title: tripData.title || defaultTripData.title,
+        startDate: tripData.startDate || '',
+        dates: tripData.dates || defaultTripData.dates,
+        categories: getCategories(),
+        members: Array.isArray(tripData.members) ? tripData.members : defaultTripData.members,
+        days: Array.isArray(tripData.days) ? tripData.days : defaultTripData.days,
+        packing: sanitizedPacking,
+        wishlist: Array.isArray(tripData.wishlist) ? tripData.wishlist : [],
+        notes: Array.isArray(tripData.notes) ? tripData.notes : [],
+        updatedAt: Date.now()
+      };
+    }
+
+    function pushTripToCloud() {
+      if (!db || !currentRoomId) return;
+      db.collection('trips').doc(currentRoomId).set(buildSanitizedPayload()).then(function() {
+        updateSyncStatusUI(true, 'リアルタイム同期中');
+      }).catch(function(err) {
+        console.error('Firestore write error:', err);
+        updateSyncStatusUI(false, '保存失敗(ルール確認)');
+      });
+    }
+
+    function updateSyncStatusUI(connected, statusText) {
+      var badge = document.getElementById('sync-status-badge');
+      if (!badge) return;
+      badge.innerHTML = connected
+        ? '<span>🟢</span> <span>' + escapeHtml(statusText || 'リアルタイム同期中') + '</span>'
+        : '<span>🟡</span> <span>' + escapeHtml(statusText || '接続中...') + '</span>';
+    }
+
+    function disconnectFirebase() {
+      if (unsubscribeSnapshot) {
+        try { unsubscribeSnapshot(); } catch (e) {}
+        unsubscribeSnapshot = null;
+      }
+      db = null;
+      isInitialRemoteFetchDone = false;
+      if (firebaseAppInstance) {
+        try { firebaseAppInstance.delete(); } catch (e) {}
+        firebaseAppInstance = null;
+      }
+      if (typeof firebase !== 'undefined' && firebase.apps) {
+        for (var i = 0; i < firebase.apps.length; i++) {
+          try { firebase.apps[i].delete(); } catch (e) {}
+        }
+      }
+    }
+
+    function applyRemoteDataToLocal(remoteData) {
+      isApplyingRemoteUpdate = true;
+      tripData = {
+        title: remoteData.title || defaultTripData.title,
+        startDate: remoteData.startDate || '',
+        dates: remoteData.dates || defaultTripData.dates,
+        categories: (Array.isArray(remoteData.categories) && remoteData.categories.length > 0)
+          ? remoteData.categories
+          : JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)),
+        members: (Array.isArray(remoteData.members) && remoteData.members.length > 0) ? remoteData.members : defaultTripData.members,
+        days: (Array.isArray(remoteData.days) && remoteData.days.length > 0) ? remoteData.days : defaultTripData.days,
+        packing: Array.isArray(remoteData.packing) ? remoteData.packing : [],
+        wishlist: Array.isArray(remoteData.wishlist) ? remoteData.wishlist : [],
+        notes: Array.isArray(remoteData.notes) ? remoteData.notes : []
+      };
+      if (!tripData.days.some(function(d) { return d.id === selectedDayId; })) {
+        selectedDayId = tripData.days[0].id;
+      }
+      saveData(true);
+      renderAll();
+      isApplyingRemoteUpdate = false;
+    }
+
+    function initFirebaseSync(isNewlyCreatedRoom) {
+      disconnectFirebase();
+      if (typeof firebase === 'undefined') {
+        updateSyncStatusUI(false, 'オフライン');
+        return;
+      }
+      updateSyncStatusUI(false, '同期接続中...');
+      try {
+        firebaseAppInstance = firebase.initializeApp(DEFAULT_FIREBASE_CONFIG, 'shiori-sync-' + Date.now());
+        var auth = firebaseAppInstance.auth();
+        auth.signInAnonymously().catch(function() {}).finally(function() {
+          if (!firebaseAppInstance) return;
+          db = firebaseAppInstance.firestore();
+          subscribeToTripRoom(currentRoomId, isNewlyCreatedRoom);
+        });
+      } catch (e) {
+        console.error('Firebase init error:', e);
+        updateSyncStatusUI(false, '接続エラー');
+      }
+    }
+
+    function subscribeToTripRoom(roomId, isNewlyCreatedRoom) {
+      if (!db) return;
+      var tripRef = db.collection('trips').doc(roomId);
+
+      tripRef.get().then(function(snap) {
+        isInitialRemoteFetchDone = true;
+        updateSyncStatusUI(true, 'リアルタイム同期中');
+
+        if (snap.exists && !isNewlyCreatedRoom) {
+          applyRemoteDataToLocal(snap.data());
+        } else {
+          pushTripToCloud();
+        }
+
+        unsubscribeSnapshot = tripRef.onSnapshot(function(docSnap) {
+          updateSyncStatusUI(true, 'リアルタイム同期中');
+          if (docSnap.exists && !docSnap.metadata.hasPendingWrites) {
+            applyRemoteDataToLocal(docSnap.data());
+          }
+        }, function(err) {
+          console.error('onSnapshot error:', err);
+          updateSyncStatusUI(false, '同期エラー');
+        });
+      }).catch(function(err) {
+        console.error('Firestore get error:', err);
+        isInitialRemoteFetchDone = true;
+        updateSyncStatusUI(false, '接続拒否(ルール確認)');
+        showToast('クラウド接続エラー：FirebaseのFirestoreルール設定を確認してください');
+      });
+    }
+
+    function forceManualSync() {
+      showToast('クラウドと再同期しています...');
+      initFirebaseSync(false);
     }
 
     function renderHomeMyTripsList() {
@@ -863,6 +1033,7 @@
     }
 
     function goToHomePortal() {
+      disconnectFirebase();
       registerCurrentTripToMyList();
       showHomeView();
     }
@@ -907,13 +1078,14 @@
         tripData = JSON.parse(JSON.stringify(defaultTripData));
         personalChecks = {};
         savePersonalChecks();
-        saveData();
+        saveData(true);
       } else {
         tripData = loadLocalData(currentRoomId);
         personalChecks = loadPersonalChecks(currentRoomId);
       }
       selectedDayId = (tripData.days[0] && tripData.days[0].id) ? tripData.days[0].id : 'day1';
       renderAll();
+      initFirebaseSync(!!resetToEmpty);
     }
 
     function copyQuickRoomCode() {
@@ -1190,7 +1362,7 @@
               '<span class="text-sm font-medium text-stone-800">' + escapeHtml(m.name) + '</span>' +
             '</div>' +
             (tripData.members.length > 1
-              ? '<button type="button" onclick="removeMember(\'' + m.id + '\')" class="text-stone-400 hover:text-terracotta-600 text-xs px-2 py-1">削除</button>'
+              ? '<button type="button" onclick="removeMember(\'' + m.id + '\')" class="text-stone-400 hover:text-terracotta-600 text-xs px-2 py-1 cursor-pointer">削除</button>'
               : '') +
           '</div>'
         );
@@ -1259,7 +1431,7 @@
           '<div class="flex items-center justify-between bg-cream px-3 py-2 rounded-xl border border-stone-200/70">' +
             '<span class="text-xs font-bold px-2.5 py-1 rounded-full ' + c.badgeBg + '">' + escapeHtml(c.emoji) + ' ' + escapeHtml(c.label) + '</span>' +
             (cats.length > 1
-              ? '<button type="button" onclick="deleteScheduleCategory(\'' + c.id + '\')" class="text-stone-400 hover:text-terracotta-600 text-xs px-2 py-1 font-bold">削除</button>'
+              ? '<button type="button" onclick="deleteScheduleCategory(\'' + c.id + '\')" class="text-stone-400 hover:text-terracotta-600 text-xs px-2 py-1 font-bold cursor-pointer">削除</button>'
               : '<span class="text-[10px] text-stone-400">最低1つ必要</span>') +
           '</div>'
         );
@@ -1547,8 +1719,6 @@
       return !!personalChecks[item.id];
     }
 
-    var selectedNewPackingAssignees = ['m1'];
-
     function renderNewPackingAssigneeSelector() {
       var container = document.getElementById('new-packing-assignees-container');
       if (!container) return;
@@ -1712,8 +1882,6 @@
       savePersonalChecks();
       renderPackingSection();
     }
-
-    var editingPackingAssigneeIds = [];
 
     function openEditPackingAssignees(id) {
       var item = tripData.packing.find(function(p) { return p.id === id; });
