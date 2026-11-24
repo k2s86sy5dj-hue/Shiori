@@ -707,9 +707,13 @@
       measurementId: "G-7J8H632QSE"
     };
 
-    var LOCAL_DATA_PREFIX = 'shiori_app_room_';
-    var PERSONAL_CHECK_PREFIX = 'shiori_app_checks_';
-    var MY_TRIPS_INDEX_KEY = 'shiori_app_my_trips_v1';
+    // 旧バージョン互換を含む保存キー一覧
+    var LOCAL_DATA_PREFIX = 'group_trip_shiori_clean_room_';
+    var LEGACY_DATA_PREFIXES = ['group_trip_shiori_clean_room_', 'shiori_app_room_'];
+    var PERSONAL_CHECK_PREFIX = 'group_trip_shiori_personal_checks_';
+    var LEGACY_CHECK_PREFIXES = ['group_trip_shiori_personal_checks_', 'shiori_app_checks_'];
+    var MY_TRIPS_INDEX_KEY = 'group_trip_shiori_my_trips_index_v1';
+    var LEGACY_INDEX_KEYS = ['group_trip_shiori_my_trips_index_v1', 'shiori_app_my_trips_v1'];
 
     var firebaseAppInstance = null;
     var db = null;
@@ -765,26 +769,82 @@
       return code;
     }
 
-    function loadLocalData(roomId) {
-      try {
-        var saved = localStorage.getItem(LOCAL_DATA_PREFIX + roomId);
-        if (saved) {
-          var parsed = JSON.parse(saved);
-          if (!Array.isArray(parsed.categories) || parsed.categories.length === 0) {
-            parsed.categories = JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
-          }
-          return parsed;
+    // しおりに実質的な入力データがあるか判定（空データでの上書きを防止）
+    function hasTripContent(data) {
+      if (!data) return false;
+      if (data.title && data.title !== defaultTripData.title) return true;
+      if (data.startDate) return true;
+      if (Array.isArray(data.members) && data.members.length > 1) return true;
+      if (Array.isArray(data.days)) {
+        if (data.days.length > 1) return true;
+        for (var i = 0; i < data.days.length; i++) {
+          if (data.days[i].items && data.days[i].items.length > 0) return true;
         }
-      } catch (e) {}
-      return JSON.parse(JSON.stringify(defaultTripData));
+      }
+      if (Array.isArray(data.packing) && data.packing.length > 0) return true;
+      if (Array.isArray(data.wishlist) && data.wishlist.length > 0) return true;
+      if (Array.isArray(data.notes) && data.notes.length > 0) return true;
+      return false;
+    }
+
+    function normalizeTripData(parsed) {
+      if (!parsed || typeof parsed !== 'object') return JSON.parse(JSON.stringify(defaultTripData));
+      return {
+        title: parsed.title || defaultTripData.title,
+        startDate: parsed.startDate || '',
+        dates: parsed.dates || defaultTripData.dates,
+        categories: (Array.isArray(parsed.categories) && parsed.categories.length > 0)
+          ? parsed.categories
+          : JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)),
+        members: (Array.isArray(parsed.members) && parsed.members.length > 0)
+          ? parsed.members
+          : JSON.parse(JSON.stringify(defaultTripData.members)),
+        days: (Array.isArray(parsed.days) && parsed.days.length > 0)
+          ? parsed.days
+          : JSON.parse(JSON.stringify(defaultTripData.days)),
+        packing: Array.isArray(parsed.packing) ? parsed.packing : [],
+        wishlist: Array.isArray(parsed.wishlist) ? parsed.wishlist : [],
+        notes: Array.isArray(parsed.notes) ? parsed.notes : []
+      };
+    }
+
+    // 旧キー・新キーの両方からデータを探して自動復元する
+    function loadLocalData(roomId) {
+      var bestData = null;
+      var candidates = [roomId, roomId.toUpperCase(), roomId.toLowerCase()];
+      for (var p = 0; p < LEGACY_DATA_PREFIXES.length; p++) {
+        for (var c = 0; c < candidates.length; c++) {
+          try {
+            var raw = localStorage.getItem(LEGACY_DATA_PREFIXES[p] + candidates[c]);
+            if (raw) {
+              var parsed = normalizeTripData(JSON.parse(raw));
+              if (hasTripContent(parsed)) {
+                return parsed;
+              }
+              if (!bestData) bestData = parsed;
+            }
+          } catch (e) {}
+        }
+      }
+      return bestData || JSON.parse(JSON.stringify(defaultTripData));
     }
 
     function loadPersonalChecks(roomId) {
-      try {
-        var saved = localStorage.getItem(PERSONAL_CHECK_PREFIX + roomId);
-        if (saved) return JSON.parse(saved);
-      } catch (e) {}
-      return {};
+      var merged = {};
+      for (var p = 0; p < LEGACY_CHECK_PREFIXES.length; p++) {
+        try {
+          var saved = localStorage.getItem(LEGACY_CHECK_PREFIXES[p] + roomId);
+          if (saved) {
+            var parsed = JSON.parse(saved);
+            if (parsed && typeof parsed === 'object') {
+              Object.keys(parsed).forEach(function(k) {
+                if (parsed[k]) merged[k] = true;
+              });
+            }
+          }
+        } catch (e) {}
+      }
+      return merged;
     }
 
     function savePersonalChecks() {
@@ -793,20 +853,34 @@
       } catch (e) {}
     }
 
+    // 旧バージョンと新バージョンのマイしおり一覧を自動統合して復元
     function loadMyTripsIndex() {
-      try {
-        var saved = localStorage.getItem(MY_TRIPS_INDEX_KEY);
-        if (saved) {
-          var parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) return parsed;
-        }
-      } catch (e) {}
-      return [];
+      var map = {};
+      for (var k = 0; k < LEGACY_INDEX_KEYS.length; k++) {
+        try {
+          var saved = localStorage.getItem(LEGACY_INDEX_KEYS[k]);
+          if (saved) {
+            var parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) {
+              parsed.forEach(function(item) {
+                if (item && item.roomId) {
+                  var existing = map[item.roomId];
+                  if (!existing || (item.lastOpenedAt || 0) > (existing.lastOpenedAt || 0)) {
+                    map[item.roomId] = item;
+                  }
+                }
+              });
+            }
+          }
+        } catch (e) {}
+      }
+      return Object.keys(map).map(function(id) { return map[id]; });
     }
 
     function saveMyTripsIndex(list) {
       try {
         localStorage.setItem(MY_TRIPS_INDEX_KEY, JSON.stringify(list));
+        localStorage.setItem('shiori_app_my_trips_v1', JSON.stringify(list));
       } catch (e) {}
     }
 
@@ -841,7 +915,7 @@
         if (db && isInitialRemoteFetchDone) {
           pushTripToCloud();
         } else if (!db) {
-          initFirebaseSync(true);
+          initFirebaseSync(false);
         }
       }
     }
@@ -906,19 +980,7 @@
 
     function applyRemoteDataToLocal(remoteData) {
       isApplyingRemoteUpdate = true;
-      tripData = {
-        title: remoteData.title || defaultTripData.title,
-        startDate: remoteData.startDate || '',
-        dates: remoteData.dates || defaultTripData.dates,
-        categories: (Array.isArray(remoteData.categories) && remoteData.categories.length > 0)
-          ? remoteData.categories
-          : JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)),
-        members: (Array.isArray(remoteData.members) && remoteData.members.length > 0) ? remoteData.members : defaultTripData.members,
-        days: (Array.isArray(remoteData.days) && remoteData.days.length > 0) ? remoteData.days : defaultTripData.days,
-        packing: Array.isArray(remoteData.packing) ? remoteData.packing : [],
-        wishlist: Array.isArray(remoteData.wishlist) ? remoteData.wishlist : [],
-        notes: Array.isArray(remoteData.notes) ? remoteData.notes : []
-      };
+      tripData = normalizeTripData(remoteData);
       if (!tripData.days.some(function(d) { return d.id === selectedDayId; })) {
         selectedDayId = tripData.days[0].id;
       }
@@ -956,16 +1018,29 @@
         isInitialRemoteFetchDone = true;
         updateSyncStatusUI(true, 'リアルタイム同期中');
 
+        var localHasContent = hasTripContent(tripData);
         if (snap.exists && !isNewlyCreatedRoom) {
-          applyRemoteDataToLocal(snap.data());
-        } else {
+          var remoteData = snap.data();
+          var remoteHasContent = hasTripContent(remoteData);
+          if (remoteHasContent) {
+            applyRemoteDataToLocal(remoteData);
+          } else if (localHasContent) {
+            // クラウド側が空で、手元にデータがある場合は手元のデータをクラウドへ復元送信
+            pushTripToCloud();
+          } else {
+            applyRemoteDataToLocal(remoteData);
+          }
+        } else if (isNewlyCreatedRoom || localHasContent) {
           pushTripToCloud();
         }
 
         unsubscribeSnapshot = tripRef.onSnapshot(function(docSnap) {
           updateSyncStatusUI(true, 'リアルタイム同期中');
           if (docSnap.exists && !docSnap.metadata.hasPendingWrites) {
-            applyRemoteDataToLocal(docSnap.data());
+            var incoming = docSnap.data();
+            if (hasTripContent(incoming) || !hasTripContent(tripData)) {
+              applyRemoteDataToLocal(incoming);
+            }
           }
         }, function(err) {
           console.error('onSnapshot error:', err);
@@ -982,6 +1057,18 @@
     function forceManualSync() {
       showToast('クラウドと再同期しています...');
       initFirebaseSync(false);
+    }
+
+    function syncRoomIdToUrl(roomId) {
+      try {
+        var url = new URL(window.location.href);
+        if (roomId) {
+          url.searchParams.set('room', roomId);
+        } else {
+          url.searchParams.delete('room');
+        }
+        window.history.replaceState({}, '', url.toString());
+      } catch (e) {}
     }
 
     function renderHomeMyTripsList() {
@@ -1024,12 +1111,14 @@
     function showHomeView() {
       document.getElementById('home-portal-view').classList.remove('hidden');
       document.getElementById('shiori-app-view').classList.add('hidden');
+      syncRoomIdToUrl('');
       renderHomeMyTripsList();
     }
 
     function showShioriView() {
       document.getElementById('home-portal-view').classList.add('hidden');
       document.getElementById('shiori-app-view').classList.remove('hidden');
+      syncRoomIdToUrl(currentRoomId);
     }
 
     function goToHomePortal() {
@@ -2305,6 +2394,21 @@
     }
 
     function bootApp() {
+      var urlRoom = '';
+      try {
+        var params = new URLSearchParams(window.location.search);
+        var raw = params.get('room');
+        if (raw && raw.trim()) {
+          urlRoom = raw.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+        }
+      } catch (e) {}
+
+      if (urlRoom) {
+        switchToRoom(urlRoom, false);
+        showShioriView();
+        return;
+      }
+
       var list = loadMyTripsIndex();
       if (list.length > 0) {
         currentRoomId = list[0].roomId;
